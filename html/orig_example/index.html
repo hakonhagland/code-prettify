@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Prettifying Perl code</title>
+<!-- The defer is not necessary for autoloading, but is necessary for the
+     script at the bottom to work as a Quine. -->
+<script src="https://cdn.rawgit.com/google/code-prettify/master/loader/run_prettify.js"></script>
+</head>
+<body> 
+<pre class="prettyprint lang-perl">
+#!/usr/bin/perl
+use strict;
+use warnings 'all';
+
+use LWP::Simple 'get';
+use HTML::Parser;
+
+my ( $date, $first_page, $last_page, @toc );
+
+print 'Enter the URL: ';
+my $url = <>;
+$url ||= 'http://ajpheart.physiology.org/content/309/11';
+chomp $url;
+
+my ( $volume, $issue ) = ( split m(/), $url )[ -2, -1 ];  #/
+
+my $p = 'HTML::Parser'->new(
+    api_version => 3,
+    start_h     => [ \&get_span_div, 'self, tagname, attr' ],
+);
+
+my $contents = get($url);
+$p->parse( $contents );
+$p->eof;
+
+my $toc = '';
+for my $section ( @toc ) {
+    $toc .= "\n";
+    $toc .= "    <TocSection>\n";
+    $toc .= "      <Heading>" . shift( @$section ) . "</Heading>\n";
+    $toc .= "      <DOI>$_</DOI>\n" for @$section;
+    $toc .= "    </TocSection>";
+}
+
+open my $out_fh, '>', "meta_issue_$issue.xml" or die $!;
+
+print  { $out_fh } <<"__HTML__";
+<!DOCTYPE MetaIssue SYSTEM "http://schema.highwire.org/public/toc/MetaIssue.pubids.dtd">
+<MetaIssue volume="$volume" issue="$issue">
+  <Provider>Cadmus</Provider>
+  <IssueDate>$date</IssueDate>
+  <PageRange>$first_page-$last_page</PageRange>
+  <TOC>$toc
+  </TOC>
+</MetaIssue>
+__HTML__
+#/
+
+sub get_span_div {
+    my ( $self, $tag, $attr ) = @_;
+
+    my $class = $attr->{class};
+    my %class;
+    %class = map { $_ => 1 } split ' ', $class if $class;
+
+    if ( $tag eq 'span' ) {
+
+        if ( $class{'highwire-cite-metadata-date'} ) {
+
+            $self->handler( text => \&next_text_to_date, 'self, text' ) unless $date;
+        }
+        elsif ( $class{'highwire-cite-metadata-pages'} ) {
+
+            if ( not defined $first_page ) {
+                $self->handler( text => \&parse_first_page, 'self, text' );
+            }
+            else {
+                $self->handler( text => \&parse_last_page, 'self, text' );
+            }
+        }
+        elsif ( $class{'highwire-cite-metadata-doi'} ) {
+
+            $self->handler( text => \&retrieve_doi, 'self, text' );
+        }
+    }
+    elsif ( $tag eq 'div' ) {
+
+        if ( $class{'issue-toc-section'} ) {
+            $self->handler( text => \&next_text_to_toc, 'self, text' );
+        }
+    }
+}
+
+sub next_text_to_date {
+    my ( $self, $text ) = @_;
+
+    ($date = $text) =~ s/^\s+|\s+$//g;  #/
+    $self->handler( text => undef );
+}
+
+sub parse_first_page {
+    my ( $self, $text ) = @_;
+
+    return unless $text =~ /(\w+)(-\w+)?/;  #/
+
+    $first_page = $1;
+    $self->handler( text => undef );
+}
+
+sub parse_last_page {
+    my ( $self, $text ) = @_;
+
+    return unless $text =~ /\w+-(\w+)/;  #/
+
+    $last_page = $1;
+    $self->handler( text => undef );
+}
+
+sub next_text_to_toc {
+    my ( $self, $text ) = @_;
+
+    push @toc, [ $text ];
+    $self->handler( text => undef );
+}
+
+sub retrieve_doi {
+    my ( $self, $text ) = @_;
+
+    return unless $text =~ /\d+/;  #/
+
+    $text =~ s/^\s+|\s+$//g;
+    push @{ $toc[-1] }, $text;
+    $self->handler( text => undef );
+}
+</pre>
+</body>
+</html>
