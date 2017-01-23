@@ -228,6 +228,7 @@ var IN_GLOBAL_SCOPE = false;
   // over which we exercise no control.
   var LOADER_BASE_URL =
      'https://cdn.rawgit.com/google/code-prettify/master/loader';
+
   for (var i = 0, n = langs.length; i < n; ++i) (function (lang) {
     var script = doc.createElement("script");
 
@@ -275,7 +276,7 @@ var IN_GLOBAL_SCOPE = false;
   skinUrls.push(LOADER_BASE_URL + '/prettify.css');
   loadStylesheetsFallingBack(skinUrls);
 
-	var prettyPrint = (function () {
+    var prettyPrint = (function () {
     /**
      * @license
      * Copyright (C) 2006 Google Inc.
